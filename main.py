@@ -6,10 +6,16 @@ def main() -> None:
     loader = ReviewLoader()
     processor = ReviewProcessor()
 
+    # Load reviews from files
     train_reviews, train_labels = loader.load_train_reviews()
+
+    # Preprocess reviews to convert to count matrix
     train_X = processor.process_train_reviews(train_reviews, include_bigrams=False)
+
+    # Remove features (uni-/bigrams) that occur in very few documents
     train_X = processor.filter_rare_terms(train_X, min_review_freq=.01)
 
+    # Specify which model configurations to evaluate
     models = [
         NaiveBayesClassifier(name="NaiveBayes(Laplace)", smoothing_alpha=1.0),
         NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1)
