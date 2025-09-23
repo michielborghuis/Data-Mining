@@ -2,6 +2,13 @@ from data_loading import ReviewLoader
 from preprocessing import ReviewProcessor
 from models import NaiveBayesClassifier
 
+import numpy as np
+import random
+
+# Set seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
+
 def main() -> None:
     loader = ReviewLoader()
     processor = ReviewProcessor()
