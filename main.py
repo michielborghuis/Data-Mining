@@ -45,6 +45,8 @@ def main() -> None:
         )
     print("")
 
+    models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
+
     # NOTE: we should only start looking at test set performance in a couple of weeks or so
     #   -> modelling/hyperparameter choices should NOT be based on test set performance 
 

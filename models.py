@@ -63,3 +63,37 @@ class NaiveBayesClassifier(Classifier):
 
     def _initialize_model(self) -> None:
         self.model = MultinomialNB(alpha=self.alpha, force_alpha=True)
+
+    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str]) -> None:
+        log_probs = self.model.feature_log_prob_
+        probs = np.exp(log_probs)
+        prob_ratios = probs[1]/probs[0]
+        indices = np.argsort(prob_ratios)
+        max_len = np.max([len(token) for token in index_to_word_mapping.values()])
+
+        print('MOST IMPORTANT FEATURES FOR NEGATIVE CLASSIFICATIONS:\n')
+        print('Token'.ljust(max_len + 2)+'|\tP(x|y=1)/P(x|y=0)')
+        print('-'*35)
+        for i in indices[:20]:
+            token = index_to_word_mapping[i]
+            print(f"{token}".ljust(max_len + 2)+f"|\t{prob_ratios[i]:.3f}")
+
+        print("")
+        print('#'*35)
+        print("")
+
+        print('MOST IMPORTANT FEATURES FOR POSITIVE CLASSIFICATIONS:\n')
+        print('Token'.ljust(max_len + 2)+'|\tP(x|y=1)/P(x|y=0)')
+        print('-'*35)
+        for i in indices[-20:]:
+            token = index_to_word_mapping[i]
+            print(f"{token}".ljust(max_len + 2)+f"|\t{prob_ratios[i]:.3f}")
+
+        print("")
+        print('#'*35)
+        print("")
+
+        low_ratios = prob_ratios[np.where(prob_ratios < 1.25)]
+        moderate_ratios = low_ratios[np.where(low_ratios > .8)]
+
+        print(f"{len(moderate_ratios)}/{len(prob_ratios)} FEATURES APPEAR NON-DISCRIMINATIVE (0.8 < PROB RATIO < 1.25)")
