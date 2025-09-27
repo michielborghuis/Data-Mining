@@ -3,9 +3,10 @@ from typing import Dict
 import numpy as np
 
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mutual_info_score
 
 from util import CVManager
+from mrmr import mrmr_top_k
 
 class Classifier:
     def __init__(self, name: str) -> None:
@@ -26,8 +27,8 @@ class Classifier:
 
         return performance_dict
 
-    def get_validation_performance(self, X: np.ndarray, y: np.ndarray) -> Dict[str,float]:
-        cv_manager = CVManager(X=X, y=y)
+    def get_validation_performance(self, X: np.ndarray, y: np.ndarray, n_features: int=None) -> Dict[str,float]:
+        cv_manager = CVManager(X=X, y=y, n_folds=10)
 
         performance_dict = {
             "accuracy":[],
@@ -38,6 +39,27 @@ class Classifier:
 
         for fold_nr in range(cv_manager.n_folds):
             (train_X, train_y), (val_X, val_y) = cv_manager.get_fold_data()
+
+            ###     START FEATURE SELECTION SECTION         ###
+            
+            ### CURRENT FEATURE UTILITY: MUTUAL INFORMATION ###
+
+            if n_features not in [train_X.shape[1], None]:
+                binary_X = (train_X > 0)*1
+
+                #doc_freqs = np.sum(binary_X/binary_X.shape[0], axis=0)
+
+                mi_scores = np.zeros(binary_X.shape[1])
+                for feature_idx in range(binary_X.shape[1]):
+                    mi_scores[feature_idx] = mutual_info_score(train_X[:,feature_idx], train_y)
+
+                feature_score = mi_scores#*doc_freqs
+                good_feature_ids = np.argpartition(feature_score, -n_features)[-n_features:]
+
+                train_X = train_X[:,good_feature_ids]
+                val_X = val_X[:,good_feature_ids]
+
+            ### END FEATURE SELECTION SECTION ###
 
             self._initialize_model()
             self.model.fit(train_X, train_y)

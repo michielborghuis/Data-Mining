@@ -20,12 +20,17 @@ def main() -> None:
     train_X = processor.process_train_reviews(train_reviews, include_bigrams=False)
 
     # Remove features (uni-/bigrams) that occur in very few documents
-    train_X = processor.filter_rare_terms(train_X, min_review_freq=.01)
+    train_X = processor.filter_rare_terms(train_X, min_review_freq=.005)
+
+    print(train_X.shape)
+    #exit()
 
     # Specify which model configurations to evaluate
     models = [
-        NaiveBayesClassifier(name="NaiveBayes(Laplace)", smoothing_alpha=1.0),
-        NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1)
+        #NaiveBayesClassifier(name="NaiveBayes(alpha=2)", smoothing_alpha=2.0),
+        NaiveBayesClassifier(name="NaiveBayes(alpha=1)", smoothing_alpha=1.0),
+        #NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
+        #NaiveBayesClassifier(name="NaiveBayes(alpha=1e-5)", smoothing_alpha=1e-5)
     ]
 
     print("")
@@ -35,7 +40,7 @@ def main() -> None:
     print(f"MODEL\t\t\t|\tACC\t|\tPREC\t|\tREC\t|\tF1")
     print("-"*100)
     for model in models:
-        cv_performance = model.get_validation_performance(train_X, train_labels)
+        cv_performance = model.get_validation_performance(train_X, train_labels, n_features=1250)
         print(
             f"{model.name}\t|\t" + \
             f"{100*cv_performance['accuracy']:.2f}%\t|\t" + \
@@ -45,7 +50,7 @@ def main() -> None:
         )
     print("")
 
-    models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
+    #models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
 
     # NOTE: we should only start looking at test set performance in a couple of weeks or so
     #   -> modelling/hyperparameter choices should NOT be based on test set performance 
