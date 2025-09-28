@@ -3,10 +3,10 @@ from typing import Dict
 import numpy as np
 
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.ensemble import RandomForestClassifier as SklearnRF
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mutual_info_score
 
 from util import CVManager
-from mrmr import mrmr_top_k
 
 class Classifier:
     def __init__(self, name: str) -> None:
@@ -119,3 +119,11 @@ class NaiveBayesClassifier(Classifier):
         moderate_ratios = low_ratios[np.where(low_ratios > .8)]
 
         print(f"{len(moderate_ratios)}/{len(prob_ratios)} FEATURES APPEAR NON-DISCRIMINATIVE (0.8 < PROB RATIO < 1.25)")
+
+class RandomForestClassifier(Classifier):
+    def __init__(self, n_estimators: int = 100, name: str = "RandomForest") -> None:
+        super().__init__(name)
+        self.n_estimators = n_estimators
+
+    def _initialize_model(self) -> None:
+        self.model = SklearnRF(n_estimators=self.n_estimators, random_state=42)
