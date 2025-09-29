@@ -3,7 +3,7 @@ from typing import Dict
 import numpy as np
 
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.ensemble import RandomForestClassifier as SklearnRF
+from sklearn.ensemble import RandomForestClassifier as SklearnRF, GradientBoostingClassifier as SklearnGB
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mutual_info_score
 
 from util import CVManager
@@ -159,6 +159,46 @@ class RandomForestClassifier(Classifier):
         max_len = np.max([len(token) for token in index_to_word_mapping.values()])
 
         print(f"Top {top_n} Important Features (Random Forest):\n")
+        print('Token'.ljust(max_len + 2)+'|\tImportance')
+        print('-'*35)
+        for i in indices[:top_n]:
+            token = index_to_word_mapping.get(i, str(i))
+            print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
+        print("")
+
+class GradientBoostingClassifier(Classifier):
+    def __init__(
+        self,
+        n_estimators: int = 100,
+        learning_rate: float = 0.1,
+        max_depth: int = 3,
+        subsample: float = 1.0,
+        max_features: str | None = None,
+        name: str = "GradientBoosting"
+    ) -> None:
+        super().__init__(name)
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.max_depth = max_depth
+        self.subsample = subsample
+        self.max_features = max_features
+
+    def _initialize_model(self) -> None:
+        self.model = SklearnGB(
+            n_estimators=self.n_estimators,
+            learning_rate=self.learning_rate,
+            max_depth=self.max_depth,
+            subsample=self.subsample,
+            max_features=self.max_features,
+            random_state=42
+        )
+
+    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
+        importances = self.model.feature_importances_
+        indices = np.argsort(importances)[::-1]
+        max_len = max(len(str(token)) for token in index_to_word_mapping.values())
+
+        print(f"Top {top_n} Important Features (Gradient Boosting):\n")
         print('Token'.ljust(max_len + 2)+'|\tImportance')
         print('-'*35)
         for i in indices[:top_n]:

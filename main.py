@@ -1,6 +1,6 @@
 from data_loading import ReviewLoader
 from preprocessing import ReviewProcessor
-from models import NaiveBayesClassifier,RandomForestClassifier
+from models import NaiveBayesClassifier,RandomForestClassifier,GradientBoostingClassifier
 
 import numpy as np
 import random
@@ -27,13 +27,15 @@ def main() -> None:
 
     # Specify which model configurations to evaluate
     models = [
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=2)", smoothing_alpha=2.0),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=1)", smoothing_alpha=1.0),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=1e-5)", smoothing_alpha=1e-5),
-        #RandomForestClassifier(name="RandomForest(n=50)", n_estimators=50),
-        RandomForestClassifier(name="RandomForest(n=100)", n_estimators=100),
-        #RandomForestClassifier(name="RandomForest(n=200)", n_estimators=200),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=2)", smoothing_alpha=2.0),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=1)", smoothing_alpha=1.0),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=1e-5)", smoothing_alpha=1e-5),
+        # RandomForestClassifier(name="RandomForest(n=50)", n_estimators=50),
+        # RandomForestClassifier(name="RandomForest(n=100)", n_estimators=100),
+        # RandomForestClassifier(name="RandomForest(n=200)", n_estimators=200),
+        GradientBoostingClassifier(name="GradientBoosting(n=300)", n_estimators=300),
+        #GradientBoostingClassifier(name="GradientBoosting(n=1000)", n_estimators=1000),
     ]
 
     print("")
@@ -53,7 +55,7 @@ def main() -> None:
         )
     print("")
 
-    #models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
+    models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
 
     # NOTE: we should only start looking at test set performance in a couple of weeks or so
     #   -> modelling/hyperparameter choices should NOT be based on test set performance 
