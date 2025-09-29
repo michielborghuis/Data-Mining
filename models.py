@@ -127,3 +127,16 @@ class RandomForestClassifier(Classifier):
 
     def _initialize_model(self) -> None:
         self.model = SklearnRF(n_estimators=self.n_estimators, random_state=42)
+
+    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
+        importances = self.model.feature_importances_
+        indices = np.argsort(importances)[::-1]
+        max_len = np.max([len(token) for token in index_to_word_mapping.values()])
+
+        print(f"Top {top_n} Important Features (Random Forest):\n")
+        print('Token'.ljust(max_len + 2)+'|\tImportance')
+        print('-'*35)
+        for i in indices[:top_n]:
+            token = index_to_word_mapping.get(i, str(i))
+            print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
+        print("")
