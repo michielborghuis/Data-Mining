@@ -121,9 +121,47 @@ class NaiveBayesClassifier(Classifier):
         print(f"{len(moderate_ratios)}/{len(prob_ratios)} FEATURES APPEAR NON-DISCRIMINATIVE (0.8 < PROB RATIO < 1.25)")
 
 class RandomForestClassifier(Classifier):
-    def __init__(self, n_estimators: int = 100, name: str = "RandomForest") -> None:
+    def __init__(
+        self,
+        n_estimators: int = 100,
+        criterion: str = "gini",
+        max_depth: int | None = None,
+        min_samples_split: float = 2,
+        min_samples_leaf: float = 1,
+        min_weight_fraction_leaf: float = 0.0,
+        max_features: float | str = "sqrt",
+        name: str = "RandomForest"
+    ) -> None:
         super().__init__(name)
         self.n_estimators = n_estimators
+        self.criterion = criterion
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.min_weight_fraction_leaf = min_weight_fraction_leaf
+        self.max_features = max_features
 
     def _initialize_model(self) -> None:
-        self.model = SklearnRF(n_estimators=self.n_estimators, random_state=42)
+        self.model = SklearnRF(
+            n_estimators=self.n_estimators,
+            criterion=self.criterion,
+            max_depth=self.max_depth,
+            min_samples_split=self.min_samples_split,
+            min_samples_leaf=self.min_samples_leaf,
+            min_weight_fraction_leaf=self.min_weight_fraction_leaf,
+            max_features=self.max_features,
+            random_state=42
+        )
+
+    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
+        importances = self.model.feature_importances_
+        indices = np.argsort(importances)[::-1]
+        max_len = np.max([len(token) for token in index_to_word_mapping.values()])
+
+        print(f"Top {top_n} Important Features (Random Forest):\n")
+        print('Token'.ljust(max_len + 2)+'|\tImportance')
+        print('-'*35)
+        for i in indices[:top_n]:
+            token = index_to_word_mapping.get(i, str(i))
+            print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
+        print("")
