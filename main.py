@@ -1,9 +1,12 @@
 from data_loading import ReviewLoader
 from preprocessing import ReviewProcessor
-from models import NaiveBayesClassifier
+from models import NaiveBayesClassifier,Logisticregression,SingleClassificationTree
 
 import numpy as np
 import random
+
+from sklearn import tree; 
+import matplotlib.pyplot as plt
 
 # Set seeds for reproducibility
 np.random.seed(42)
@@ -23,9 +26,23 @@ def main() -> None:
     train_X = processor.filter_rare_terms(train_X, min_review_freq=.01)
 
     # Specify which model configurations to evaluate
-    models = [
+    models = [ 
+        #SingleClassificationTree(name="majority"),
         NaiveBayesClassifier(name="NaiveBayes(Laplace)", smoothing_alpha=1.0),
-        NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1)
+        NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
+        SingleClassificationTree(name="SingleTree(alpha=.0001)", ccp_alpha=0.0001),
+        SingleClassificationTree(name="SingleTree(alpha=.001)", ccp_alpha=0.001),
+        SingleClassificationTree(name="SingleTree(alpha=.05)", ccp_alpha=0.05),
+        SingleClassificationTree(name="SingleTree(alpha=.01)", ccp_alpha=0.01),
+        SingleClassificationTree(name="SingleTree(alpha=.1)", ccp_alpha=0.1),
+        Logisticregression(name="logisticRegression(alpha=.001)", c =0.001),
+        Logisticregression(name="logisticRegression(alpha=.01)", c =0.01),
+        Logisticregression(name="logisticRegression(alpha=.1)", c =0.1),
+        Logisticregression(name="logisticRegression(alpha== 1)", c =1),
+        Logisticregression(name="logisticRegression(alpha== 10)", c =10),
+        Logisticregression(name="logisticRegression(alpha== 100)", c =100)
+        
+        
     ]
 
     print("")
@@ -45,8 +62,9 @@ def main() -> None:
         )
     print("")
 
-    models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
-
+    #models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
+    models[12].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
+    
     # NOTE: we should only start looking at test set performance in a couple of weeks or so
     #   -> modelling/hyperparameter choices should NOT be based on test set performance 
 

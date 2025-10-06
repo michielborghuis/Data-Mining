@@ -7,6 +7,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 from util import CVManager
 
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+
 class Classifier:
     def __init__(self, name: str) -> None:
         self.name = name
@@ -65,6 +68,7 @@ class NaiveBayesClassifier(Classifier):
         self.model = MultinomialNB(alpha=self.alpha, force_alpha=True)
 
     def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str]) -> None:
+        
         log_probs = self.model.feature_log_prob_
         probs = np.exp(log_probs)
         prob_ratios = probs[1]/probs[0]
@@ -97,3 +101,59 @@ class NaiveBayesClassifier(Classifier):
         moderate_ratios = low_ratios[np.where(low_ratios > .8)]
 
         print(f"{len(moderate_ratios)}/{len(prob_ratios)} FEATURES APPEAR NON-DISCRIMINATIVE (0.8 < PROB RATIO < 1.25)")
+
+
+
+class SingleClassificationTree(Classifier):
+    def __init__(self,
+                name: str="SingleClassificationTree",
+                ccp_alpha: float=1.0 ) -> None:
+        super().__init__(name)
+        self.ccp_alpha = ccp_alpha
+    
+    def _initialize_model(self):
+        self.model = DecisionTreeClassifier( 
+                                ccp_alpha=self.ccp_alpha,
+                                
+        )
+        
+    
+    def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
+        #impurity reductie
+        importances = self.model.feature_importances_
+        scores = []
+        print(len(importances)) #1274 features
+        print(importances)
+        
+        for i  in range(len(importances)):
+            token = index_to_word_mapping[i]
+            score = importances[i]
+            scores.append((token,score))
+            #print(token,score)
+        
+        sorted_pairs_desc = sorted(scores, key=lambda x: x[1], reverse=True)
+        print(sorted_pairs_desc)
+
+class Logisticregression(Classifier):
+    def __init__(self, name: str="LogisticRegression", c:float = 0.1) -> None:
+        super().__init__(name)
+        self.c = c
+        
+    def _initialize_model(self):
+        self.model = LogisticRegression(C = self.c 
+        )
+
+    def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
+        #grote van coëfficient.
+        coefs = self.model.coef_[0]
+        importance = np.abs(coefs)
+        
+        # in /word
+        scores = [(index_to_word_mapping[i], importance[i]) for i in range(len(importance))]
+
+        #sort 
+        sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+        # 10 most important features.
+        for word, score in sorted_scores[:10]:
+            print(f"{word}: {score:.4f}")
