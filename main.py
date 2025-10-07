@@ -1,5 +1,3 @@
-from data_loading import ReviewLoader
-from preprocessing import ReviewProcessor
 from models import NaiveBayesClassifier,RandomForestClassifier
 
 import numpy as np
@@ -10,30 +8,32 @@ np.random.seed(42)
 random.seed(42)
 
 def main() -> None:
-    loader = ReviewLoader()
-    processor = ReviewProcessor()
-
-    # Load reviews from files
-    train_reviews, train_labels = loader.load_train_reviews()
-
-    # Preprocess reviews to convert to count matrix
-    train_X = processor.process_train_reviews(train_reviews, include_bigrams=False)
-
-    # Remove features (uni-/bigrams) that occur in very few documents
-    train_X = processor.filter_rare_terms(train_X, min_review_freq=.005)
-
-    print(train_X.shape)
-    #exit()
-
     # Specify which model configurations to evaluate
     models = [
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=2)", smoothing_alpha=2.0),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=1)", smoothing_alpha=1.0),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
-        #NaiveBayesClassifier(name="NaiveBayes(alpha=1e-5)", smoothing_alpha=1e-5),
-        #RandomForestClassifier(name="RandomForest(n=50)", n_estimators=50),
-        RandomForestClassifier(name="RandomForest(n=100)", n_estimators=100),
-        #RandomForestClassifier(name="RandomForest(n=200)", n_estimators=200),
+        #NaiveBayesClassifier(name="NaiveBayes(1952)", smoothing_alpha=1.0, n_features=train_X.shape[1]) # Uses all features
+        #NaiveBayesClassifier(name="NaiveBayes(1933)", smoothing_alpha=1.0, n_features=1933), # Best unigram configuration (df_min = .005)
+        #NaiveBayesClassifier(name="NaiveBayes(bigram, 3436)", smoothing_alpha=0.5, n_features=3436), # Best unigram+bigram configuration (df_min = .010)
+        NaiveBayesClassifier(
+            smoothing_alpha=1.0,
+            min_df=.005,
+            drop_features=19,
+            include_bigrams=False,
+            name="NB ALL FEATURES"
+        ),
+        NaiveBayesClassifier(
+            smoothing_alpha=1.0,
+            min_df=.005,
+            drop_features=19,
+            include_bigrams=False,
+            name="NB 1933 FEATURES"
+        ),
+        NaiveBayesClassifier(
+            smoothing_alpha=1.0,
+            min_df=.005,
+            drop_features=122,
+            include_bigrams=False,
+            name="NB DROP 122 FEATS"
+        )
     ]
 
     print("")
@@ -43,23 +43,38 @@ def main() -> None:
     print(f"MODEL\t\t\t|\tACC\t|\tPREC\t|\tREC\t|\tF1")
     print("-"*100)
     for model in models:
-        cv_performance = model.get_validation_performance(train_X, train_labels, n_features=1250)
+        val_performance = model.get_validation_performance(n_folds=10, n_repeats=1)
+
         print(
             f"{model.name}\t|\t" + \
-            f"{100*cv_performance['accuracy']:.2f}%\t|\t" + \
-            f"{cv_performance['precision']:.2f}\t|\t" + \
-            f"{cv_performance['recall']:.2f}\t|\t" + \
-            f"{cv_performance['f1']:.2f}"
+            f"{100*np.mean(val_performance['accuracy']):.2f}%\t|\t" + \
+            f"{np.mean(val_performance['precision']):.2f}\t|\t" + \
+            f"{np.mean(val_performance['recall']):.2f}\t|\t" + \
+            f"{np.mean(val_performance['f1']):.2f}"
         )
     print("")
 
-    #models[0].analyse_feature_importances(index_to_word_mapping=processor.index_token_dict)
 
     # NOTE: we should only start looking at test set performance in a couple of weeks or so
     #   -> modelling/hyperparameter choices should NOT be based on test set performance 
 
-    #test_reviews, test_labels = loader.load_test_reviews()
-    #test_X = processor.process_test_reviews(test_reviews, include_bigrams=False)
+    print("")
+    print("TEST SET PERFORMANCES:")
+    print("")
+    print("-"*100)
+    print(f"MODEL\t\t\t|\tACC\t|\tPREC\t|\tREC\t|\tF1")
+    print("-"*100)
+    for model in models:
+        test_set_performance = model.get_test_performance()
+        print(
+            f"{model.name}\t|\t" + \
+            f"{100*test_set_performance['accuracy']:.2f}%\t|\t" + \
+            f"{test_set_performance['precision']:.3f}\t|\t" + \
+            f"{test_set_performance['recall']:.3f}\t|\t" + \
+            f"{test_set_performance['f1']:.3f}"
+        )
+    
+    models[0].analyse_feature_importances()
 
 if __name__ == "__main__":
     main()
