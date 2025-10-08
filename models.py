@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Literal
 
 import numpy as np
 
@@ -87,24 +87,34 @@ class Classifier:
         return self.get_performance_metrics(test_X, test_y)
 
 class NaiveBayesClassifier(Classifier):
-    def __init__(self, smoothing_alpha: float=1.0, drop_features: int=0, min_df: float=.005, include_bigrams: bool=False, name: str="NaiveBayes") -> None:
+    def __init__(self, 
+                 smoothing_alpha: float=1.0, 
+                 features: float=None, 
+                 feature_mode: Literal["include", "drop", "fraction"]="include",
+                 min_df: float=.005, 
+                 include_bigrams: bool=False, 
+                 name: str="NaiveBayes") -> None:
+        
         super().__init__(min_df=min_df, include_bigrams=include_bigrams, name=name)
         self.alpha = smoothing_alpha
         self.min_df = min_df
-        self.drop_features = drop_features
+        self.feature_param = features
+        self.feature_mode = feature_mode
+        if self.feature_mode not in ["include", "drop", "fraction"]:
+            raise ValueError(f"Feature mode {self.feature_mode} invalid (choose from ['include', 'drop', 'fraction')")
         self.include_bigrams = include_bigrams
 
     def _initialize_model(self) -> None:
         self.model = MultinomialNB(alpha=self.alpha, force_alpha=True)
 
-    def select_features(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+    def _select_features_include(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         # Return indices of features that should be used
-        if self.drop_features in [None, 0]:
+        if self.feature_param in [None, X.shape[1]]:
             self.feature_indices = np.arange(X.shape[1])
-        elif self.drop_features > X.shape[1]:
+        elif self.feature_param > X.shape[1]:
             raise ValueError(
-                f"Total number of possible features {X.shape[1]} exceeds " + \
-                f"specified number of features to drop {self.drop_features}"
+                f"Total number of possible features {X.shape[1]} lower than " + \
+                f"specified number of features to use {self.feature_param}"
             )
         else:
             binary_X = (X > 0)*1
@@ -114,9 +124,56 @@ class NaiveBayesClassifier(Classifier):
                 mi_scores[feature_idx] = mutual_info_score(binary_X[:,feature_idx], y)
 
             feature_score = mi_scores
-            n_features = len(feature_score) - self.drop_features
+
+            self.feature_indices = np.argpartition(feature_score, -self.feature_param)[-self.feature_param:]
+
+    def _select_features_drop(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        # Return indices of features that should be used
+        if self.feature_param in [None, 0]:
+            self.feature_indices = np.arange(X.shape[1])
+        elif self.feature_param > X.shape[1]:
+            raise ValueError(
+                f"Total number of possible features {X.shape[1]} exceeds " + \
+                f"specified number of features to drop {self.feature_param}"
+            )
+        else:
+            binary_X = (X > 0)*1
+
+            mi_scores = np.zeros(binary_X.shape[1])
+            for feature_idx in range(binary_X.shape[1]):
+                mi_scores[feature_idx] = mutual_info_score(binary_X[:,feature_idx], y)
+
+            feature_score = mi_scores
+            n_features = len(feature_score) - self.feature_param
 
             self.feature_indices = np.argpartition(feature_score, -n_features)[-n_features:]
+
+    def _select_features_fraction(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        # Return indices of features that should be used
+        if self.feature_param in [None, 1]:
+            self.feature_indices = np.arange(X.shape[1])
+        elif self.feature_param > 1 or self.feature_param <= 0:
+            raise ValueError(f"Fraction of features to use not in valid range <0, 1]")
+        else:
+            binary_X = (X > 0)*1
+
+            mi_scores = np.zeros(binary_X.shape[1])
+            for feature_idx in range(binary_X.shape[1]):
+                mi_scores[feature_idx] = mutual_info_score(binary_X[:,feature_idx], y)
+
+            feature_score = mi_scores
+            n_features = int(len(feature_score) * self.feature_param)
+
+            self.feature_indices = np.argpartition(feature_score, -n_features)[-n_features:]
+
+    def select_features(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        # Return indices of features that should be used
+        if self.feature_mode == 'include':
+            self._select_features_include(X, y)
+        elif self.feature_mode == 'drop':
+            self._select_features_drop(X, y)
+        elif self.feature_mode == 'fraction':
+            self._select_features_fraction(X, y)
         
     def get_validation_performance(self, n_folds: int=10, n_repeats: int=1) -> Dict[str,float]:
         # Load reviews from files
@@ -206,12 +263,15 @@ class NaiveBayesClassifier(Classifier):
             print(f"  {fn:<25} log-odds={lo:+.4f}  ")
 
 class RandomForestClassifier(Classifier):
-    def __init__(self, n_estimators: int = 100, name: str = "RandomForest") -> None:
-        super().__init__(name)
+    def __init__(self, n_estimators: int=100, min_df: float=.005, include_bigrams: bool=False, name: str="RandomForest") -> None:
+        super().__init__(min_df=min_df, include_bigrams=include_bigrams, name=name)
         self.n_estimators = n_estimators
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
+        self.name = name
 
     def _initialize_model(self) -> None:
-        self.model = SklearnRF(n_estimators=self.n_estimators, random_state=42)
+        self.model = SklearnRF(n_estimators=self.n_estimators, random_state=42, n_jobs=-1)
 
     def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
         importances = self.model.feature_importances_
