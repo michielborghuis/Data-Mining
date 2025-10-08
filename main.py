@@ -1,7 +1,11 @@
-from models import NaiveBayesClassifier,RandomForestClassifier
+from models import NaiveBayesClassifier,Logisticregression,SingleClassificationTree,RandomForestClassifier,GradientBoostingClassifier
+
 
 import numpy as np
 import random
+
+from sklearn import tree; 
+import matplotlib.pyplot as plt
 
 # Set seeds for reproducibility
 np.random.seed(42)
@@ -98,6 +102,31 @@ def main() -> None:
         ),
     ]"""
 
+    models = [ 
+        
+        NaiveBayesClassifier(name="NaiveBayes(Laplace)", smoothing_alpha=1.0),
+        NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
+        SingleClassificationTree(name="SingleTree(alpha=.0001)", ccp_alpha=0.0001),
+        SingleClassificationTree(name="SingleTree(alpha=.001)", ccp_alpha=0.001),
+        SingleClassificationTree(name="SingleTree(alpha=.05)", ccp_alpha=0.05),
+        SingleClassificationTree(name="SingleTree(alpha=.01)", ccp_alpha=0.01),
+        SingleClassificationTree(name="SingleTree(alpha=.1)", ccp_alpha=0.1),
+        Logisticregression(name="logisticRegression(alpha=.001)", c =0.001),
+        Logisticregression(name="logisticRegression(alpha=.01)", c =0.01),
+        Logisticregression(name="logisticRegression(alpha=.1)", c =0.1),
+        Logisticregression(name="logisticRegression(alpha== 1)", c =1),
+        Logisticregression(name="logisticRegression(alpha== 10)", c =10),
+        Logisticregression(name="logisticRegression(alpha== 100)", c =100),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=2)", smoothing_alpha=2.0),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=1)", smoothing_alpha=1.0),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=.1)", smoothing_alpha=0.1),
+        # NaiveBayesClassifier(name="NaiveBayes(alpha=1e-5)", smoothing_alpha=1e-5),
+        # RandomForestClassifier(name="RandomForest(n=50)", n_estimators=50),
+        # RandomForestClassifier(name="RandomForest(n=100)", n_estimators=100),
+        # RandomForestClassifier(name="RandomForest(n=200)", n_estimators=200),
+        GradientBoostingClassifier(name="GradientBoosting(n=300)", n_estimators=300),
+        #GradientBoostingClassifier(name="GradientBoosting(n=1000)", n_estimators=1000)
+    ]
     print("")
     print("CROSS-VALIDATION PERFORMANCES:")
     print("")
