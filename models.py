@@ -323,23 +323,26 @@ class Logisticregression(Classifier):
 class RandomForestClassifier(Classifier):
     def __init__(
         self,
+        min_df: float=.005, 
+        include_bigrams: bool=False,
         n_estimators: int = 100,
         criterion: str = "gini",
         max_depth: int | None = None,
         min_samples_split: float = 2,
         min_samples_leaf: float = 1,
-        min_weight_fraction_leaf: float = 0.0,
         max_features: float | str = "sqrt",
         name: str = "RandomForest"
     ) -> None:
         super().__init__(name)
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
         self.n_estimators = n_estimators
         self.criterion = criterion
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
-        self.min_weight_fraction_leaf = min_weight_fraction_leaf
         self.max_features = max_features
+        self.name = name
 
     def _initialize_model(self) -> None:
         self.model = SklearnRF(
@@ -348,7 +351,6 @@ class RandomForestClassifier(Classifier):
             max_depth=self.max_depth,
             min_samples_split=self.min_samples_split,
             min_samples_leaf=self.min_samples_leaf,
-            min_weight_fraction_leaf=self.min_weight_fraction_leaf,
             max_features=self.max_features,
             random_state=42
         )
@@ -365,10 +367,56 @@ class RandomForestClassifier(Classifier):
             token = index_to_word_mapping.get(i, str(i))
             print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
         print("")
+    
+    def get_validation_performance(self, n_folds: int=10, n_repeats: int=1) -> Dict[str,float]:
+        # Load reviews from files
+        reviews, labels = self.loader.load_train_reviews()
+
+        performance_dict = {
+            "accuracy": np.zeros((n_repeats, n_folds)),
+            "precision": np.zeros((n_repeats, n_folds)),
+            "recall": np.zeros((n_repeats, n_folds)),
+            "f1": np.zeros((n_repeats, n_folds))
+        }
+
+        for rep_i in range(n_repeats):
+            cv_manager = CVManager(reviews=reviews, labels=labels, n_folds=n_folds)
+
+            for fold_nr in range(cv_manager.n_folds):
+                (train_X, train_y), (val_X, val_y) = cv_manager.get_fold_data()
+
+                # Preprocess reviews to convert to count matrix
+                train_X = self.processor.process_train_reviews(train_X, include_bigrams=self.include_bigrams)
+
+                # Remove features (uni-/bigrams) that occur in very few documents
+                train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+                # Load test reviews
+                val_X = self.processor.process_test_reviews(val_X, include_bigrams=self.include_bigrams)
+
+                # TODO: Maybe for later feature selection
+                # self.select_features(train_X, train_y)
+
+                # train_X = train_X[:,self.feature_indices]
+                # val_X = val_X[:,self.feature_indices]
+
+                self._initialize_model()
+                self.model.fit(train_X, train_y)
+
+                fold_metrics = self.get_performance_metrics(val_X, val_y)
+
+                performance_dict['accuracy'][rep_i][fold_nr] = fold_metrics['accuracy']
+                performance_dict['precision'][rep_i][fold_nr] = fold_metrics['precision']
+                performance_dict['recall'][rep_i][fold_nr] = fold_metrics['recall']
+                performance_dict['f1'][rep_i][fold_nr] = fold_metrics['f1']
+
+        return performance_dict
 
 class GradientBoostingClassifier(Classifier):
     def __init__(
         self,
+        min_df: float=.005, 
+        include_bigrams: bool=False,
         n_estimators: int = 100,
         learning_rate: float = 0.1,
         max_depth: int = 3,
@@ -377,11 +425,14 @@ class GradientBoostingClassifier(Classifier):
         name: str = "GradientBoosting"
     ) -> None:
         super().__init__(name)
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.max_depth = max_depth
         self.subsample = subsample
         self.max_features = max_features
+        self.name = name
 
     def _initialize_model(self) -> None:
         self.model = SklearnGB(
@@ -405,3 +456,47 @@ class GradientBoostingClassifier(Classifier):
             token = index_to_word_mapping.get(i, str(i))
             print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
         print("")
+
+    def get_validation_performance(self, n_folds: int=10, n_repeats: int=1) -> Dict[str,float]:
+        # Load reviews from files
+        reviews, labels = self.loader.load_train_reviews()
+
+        performance_dict = {
+            "accuracy": np.zeros((n_repeats, n_folds)),
+            "precision": np.zeros((n_repeats, n_folds)),
+            "recall": np.zeros((n_repeats, n_folds)),
+            "f1": np.zeros((n_repeats, n_folds))
+        }
+
+        for rep_i in range(n_repeats):
+            cv_manager = CVManager(reviews=reviews, labels=labels, n_folds=n_folds)
+
+            for fold_nr in range(cv_manager.n_folds):
+                (train_X, train_y), (val_X, val_y) = cv_manager.get_fold_data()
+
+                # Preprocess reviews to convert to count matrix
+                train_X = self.processor.process_train_reviews(train_X, include_bigrams=self.include_bigrams)
+
+                # Remove features (uni-/bigrams) that occur in very few documents
+                train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+                # Load test reviews
+                val_X = self.processor.process_test_reviews(val_X, include_bigrams=self.include_bigrams)
+
+                # TODO: Maybe for later feature selection
+                # self.select_features(train_X, train_y)
+
+                # train_X = train_X[:,self.feature_indices]
+                # val_X = val_X[:,self.feature_indices]
+
+                self._initialize_model()
+                self.model.fit(train_X, train_y)
+
+                fold_metrics = self.get_performance_metrics(val_X, val_y)
+
+                performance_dict['accuracy'][rep_i][fold_nr] = fold_metrics['accuracy']
+                performance_dict['precision'][rep_i][fold_nr] = fold_metrics['precision']
+                performance_dict['recall'][rep_i][fold_nr] = fold_metrics['recall']
+                performance_dict['f1'][rep_i][fold_nr] = fold_metrics['f1']
+
+        return performance_dict

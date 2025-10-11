@@ -18,13 +18,49 @@ def main() -> None:
         #NaiveBayesClassifier(name="NaiveBayes(1933)", smoothing_alpha=1.0, n_features=1933), # Best unigram configuration (df_min = .005)
         #NaiveBayesClassifier(name="NaiveBayes(bigram, 3436)", smoothing_alpha=0.5, n_features=3436), # Best unigram+bigram configuration (df_min = .010)
 
+        # Found using grid search
         RandomForestClassifier(
-            min_df=.01,
+            df_min=0.005,
             include_bigrams=False,
-            n_estimators=500,
-            name="RF Test"
-        ),]
-
+            n_estimators=300,
+            criterion="entropy",
+            max_depth=None,
+            min_samples_split=2,
+            min_samples_leaf=2,
+            max_features="log2",
+        ),
+        # Found using grid search
+        RandomForestClassifier(
+            df_min=0.005,
+            include_bigrams=True,
+            n_estimators=300,
+            criterion="entropy",
+            max_depth=None,
+            min_samples_split=2,
+            min_samples_leaf=2,
+            max_features="log2",
+        ),
+        # Found using grid search
+        GradientBoostingClassifier(
+            min_df=.005, 
+            include_bigrams=False, 
+            n_estimators=300, 
+            learning_rate=0.01, 
+            max_depth=10, 
+            subsample=0.8, 
+            max_features="log2"
+            ),
+        # Found using grid search
+        GradientBoostingClassifier(
+            min_df=.01, 
+            include_bigrams=True, 
+            n_estimators=300, 
+            learning_rate=0.05, 
+            max_depth=10, 
+            subsample=1.0, 
+            max_features="log2"
+            ),
+    ]
     """    # Found using backward search
         NaiveBayesClassifier(
             smoothing_alpha=1.0,
@@ -134,14 +170,14 @@ def main() -> None:
     print(f"{'MODEL':<25}|\tACC\t|\tPREC\t|\tREC\t|\tF1")
     print("-"*85)
     for model in models:
-        val_performance = model.get_validation_performance(n_folds=10, n_repeats=1)
+        val_performance = model.get_validation_performance(n_folds=10, n_repeats=10)
 
         print(
             f"{model.name:<25}|\t" + \
-            f"{100*np.mean(val_performance['accuracy']):.2f}%\t|\t" + \
-            f"{np.mean(val_performance['precision']):.2f}\t|\t" + \
-            f"{np.mean(val_performance['recall']):.2f}\t|\t" + \
-            f"{np.mean(val_performance['f1']):.2f}"
+            f"{100*np.mean(val_performance['accuracy']):.3f}%\t|\t" + \
+            f"{np.mean(val_performance['precision']):.3f}\t|\t" + \
+            f"{np.mean(val_performance['recall']):.3f}\t|\t" + \
+            f"{np.mean(val_performance['f1']):.3f}"
         )
 
     print("")
