@@ -270,56 +270,60 @@ class NaiveBayesClassifier(Classifier):
 class SingleClassificationTree(Classifier):
     def __init__(self,
                 name: str="SingleClassificationTree",
-                ccp_alpha: float=1.0 ) -> None:
-        super().__init__(name)
+                ccp_alpha: float=1.0,
+                max_depth: int=5,
+                min_samples_split:int=2,
+                min_samples_leaf: int=1
+                
+                ) -> None:
+        super().__init__(name=name)
         self.ccp_alpha = ccp_alpha
-    
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        
     def _initialize_model(self):
         self.model = DecisionTreeClassifier( 
                                 ccp_alpha=self.ccp_alpha,
-                                
+                                criterion= 'gini',
+                                max_depth= self.max_depth,
+                                min_samples_split= self.min_samples_split,
+                                min_samples_leaf= self.min_samples_leaf
         )
-        
     
     def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
-        #impurity reductie
         importances = self.model.feature_importances_
         scores = []
-        print(len(importances)) #1274 features
-        print(importances)
         
         for i  in range(len(importances)):
             token = index_to_word_mapping[i]
             score = importances[i]
             scores.append((token,score))
-            #print(token,score)
         
         sorted_pairs_desc = sorted(scores, key=lambda x: x[1], reverse=True)
         print(sorted_pairs_desc)
 
 class Logisticregression(Classifier):
     def __init__(self, name: str="LogisticRegression", c:float = 0.1) -> None:
-        super().__init__(name)
+        super().__init__(name=name)
         self.c = c
         
     def _initialize_model(self):
-        self.model = LogisticRegression(C = self.c 
+        self.model = LogisticRegression(
+            penalty='l1',
+            solver='liblinear',
+            C = self.c,
         )
 
     def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
-        #grote van coëfficient.
-        coefs = self.model.coef_[0]
-        importance = np.abs(coefs)
-        
-        # in /word
+        #weigths
+        coef = self.model.coef_[0]
+        importance = np.abs(coef)
+
         scores = [(index_to_word_mapping[i], importance[i]) for i in range(len(importance))]
 
-        #sort 
         sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
-
-        # 10 most important features.
-        for word, score in sorted_scores[:10]:
-            print(f"{word}: {score:.4f}")
+        print(sorted_scores)
 class RandomForestClassifier(Classifier):
     def __init__(
         self,
