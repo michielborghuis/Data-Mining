@@ -52,7 +52,7 @@ class ReviewProcessor:
                 if train:
                     idx = len(self.token_index_dict)
                     self.token_index_dict[token] = idx
-                    self.index_token_dict[idx] = token
+                    self.index_token_list.append(token)
 
                     token_indices.append(self.token_index_dict[token])
             else:
@@ -68,7 +68,7 @@ class ReviewProcessor:
         
         # Reset token/index mappings
         self.token_index_dict = {}
-        self.index_token_dict = {}
+        self.index_token_list = []
 
         # Convert raw text reviews into lists of token indices (builds mappings)
         token_indices = []
@@ -110,20 +110,20 @@ class ReviewProcessor:
         assert count_matrix.shape[1] == len(self.token_index_dict), "Count matrix dimension does not match vocabulary"
 
         occurence_matrix = (count_matrix > 0)*1.0
-        review_frequencies = np.sum(occurence_matrix/occurence_matrix.shape[0], axis=0)
+        review_frequencies = np.sum(occurence_matrix, axis=0) / occurence_matrix.shape[0]
         drop_token_indices = np.where(review_frequencies < min_review_freq)[0]
         
         new_token_index_dict = {}
-        new_index_token_dict = {}
+        new_index_token_list = []
         new_matrix = np.zeros((count_matrix.shape[0], count_matrix.shape[1]-len(drop_token_indices)))
         for i in range(len(self.token_index_dict)):
             if i not in drop_token_indices:
                 new_index = len(new_token_index_dict)
                 new_matrix[:,new_index] = count_matrix[:,i]
-                new_token_index_dict[self.index_token_dict[i]] = new_index
-                new_index_token_dict[new_index] = self.index_token_dict[i]
+                new_token_index_dict[self.index_token_list[i]] = new_index
+                new_index_token_list.append(self.index_token_list[i])
 
         self.token_index_dict = new_token_index_dict
-        self.index_token_dict = new_index_token_dict
+        self.index_token_list = new_index_token_list
 
         return new_matrix

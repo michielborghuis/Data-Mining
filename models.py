@@ -1,17 +1,21 @@
-from typing import Dict, Literal
+from typing import Dict, Literal, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+import shap
 
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.ensemble import RandomForestClassifier as SklearnRF, GradientBoostingClassifier as SklearnGB
+from sklearn.ensemble import RandomForestClassifier as SklearnRF 
+from sklearn.ensemble import GradientBoostingClassifier as SklearnGB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mutual_info_score
+from sklearn import tree
+from scipy.stats import spearmanr
 
 from data_loading import ReviewLoader
 from preprocessing import ReviewProcessor
-from util import CVManager, update_index_token_dict
-
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LogisticRegression
+from util import CVManager, update_index_token_list
 
 class Classifier:
     def __init__(self, min_df: float=.005, include_bigrams: bool=False, name: str="ReviewClassifier") -> None:
@@ -31,7 +35,7 @@ class Classifier:
 
         performance_dict = {}
         performance_dict['accuracy'] = accuracy_score(y, predictions)
-        performance_dict['precision'] = precision_score(y, predictions)
+        performance_dict['precision'] = precision_score(y, predictions, zero_division=0.0)
         performance_dict['recall'] = recall_score(y, predictions)
         performance_dict['f1'] = f1_score(y, predictions)
 
@@ -241,8 +245,8 @@ class NaiveBayesClassifier(Classifier):
         return self.get_performance_metrics(test_X, test_y)
 
     def analyse_feature_importances(self) -> None:
-        feature_mapping = self.processor.index_token_dict
-        feature_mapping = update_index_token_dict(feature_mapping, self.feature_indices)
+        feature_mapping = self.processor.index_token_list
+        feature_mapping = update_index_token_list(feature_mapping, self.feature_indices)
 
         log_probs = self.model.feature_log_prob_
         log_odds = log_probs[1] - log_probs[0]
@@ -266,22 +270,123 @@ class NaiveBayesClassifier(Classifier):
             print(f"  {fn:<25} log-odds={lo:+.4f}  ")
 
 
-
-class SingleClassificationTree(Classifier):
+class ClassificationTree(Classifier):
     def __init__(self,
-                name: str="SingleClassificationTree",
-                ccp_alpha: float=1.0 ) -> None:
-        super().__init__(name)
+                name: str="ClassificationTree",
+                ccp_alpha: float=.01,
+                min_df: float=.00, 
+                include_bigrams: bool=False,
+                min_samples_leaf: int=1,
+                min_samples_split: int=2,
+                max_depth: int=None) -> None:
+        super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.ccp_alpha = ccp_alpha
-    
+        self.min_samples_leaf = min_samples_leaf
+        self.min_samples_split = min_samples_split
+        self.max_depth = max_depth
+
     def _initialize_model(self):
         self.model = DecisionTreeClassifier( 
-                                ccp_alpha=self.ccp_alpha,
-                                
+            ccp_alpha=self.ccp_alpha,
+            min_samples_leaf=self.min_samples_leaf,
+            min_samples_split=self.min_samples_split,
+            max_depth=self.max_depth
         )
-        
+
+    def alpha_cross_validation(self, n_folds: int=10, n_repeats: int=1) -> Tuple[float,float]:
+        # Load reviews from files
+        reviews, labels = self.loader.load_train_reviews()
+
+        best_alphas = []
+        best_accs = []
+        for rep_i in range(n_repeats):
+            cv_manager = CVManager(reviews=reviews, labels=labels, n_folds=n_folds)
+
+            for fold_nr in range(cv_manager.n_folds):
+                (train_X, train_y), (val_X, val_y) = cv_manager.get_fold_data()
+
+                # Preprocess reviews to convert to count matrix
+                train_X = self.processor.process_train_reviews(train_X, include_bigrams=self.include_bigrams)
+
+                # Remove features (uni-/bigrams) that occur in very few documents
+                train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+                # Load test reviews
+                val_X = self.processor.process_test_reviews(val_X, include_bigrams=self.include_bigrams)
+
+                self._initialize_model()
+                alphas = self.model.cost_complexity_pruning_path(train_X, train_y)['ccp_alphas']
+
+                best_acc = 0
+                best_alpha = None
+                for alpha_count, alpha in enumerate(alphas):
+                    print(f"rep {rep_i}/{n_repeats} -- fold {fold_nr}/{n_folds} -- alpha {alpha_count}/{len(alphas)}", end='\r')
+
+                    self.ccp_alpha = alpha
+                    self._initialize_model()
+                    self.model.fit(train_X, train_y)
+
+                    fold_metrics = self.get_performance_metrics(val_X, val_y)
+
+                    if fold_metrics['accuracy'] > best_acc:
+                        best_acc = fold_metrics['accuracy']
+                        best_alpha = alpha
+
+                best_alphas.append(best_alpha)
+                best_accs.append(best_acc)
+
+                print(" "*100, end='\r')
+
+        return best_alphas, best_accs
     
-    def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
+    def analyse_feature_importances(self) -> None:
+        train_reviews, train_y = self.loader.load_train_reviews()
+
+        train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
+        train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+        test_reviews, test_y = self.loader.load_test_reviews()
+        test_X = self.processor.process_test_reviews(test_reviews, include_bigrams=self.include_bigrams)
+
+        explainer = shap.TreeExplainer(self.model)
+        sv = explainer.shap_values(test_X)
+        shap_pos = sv[1] if isinstance(sv, list) else sv  # (n_samples, n_features)
+        shap_pos = shap_pos[:,:,1]
+
+        # Compute mean shap values (indicating feature strength)
+        M = np.abs(shap_pos).mean(axis=0)  # per-feature mean |SHAP| for class 1
+        R = M / (M.max() + 1e-12) # normalize to relative strength
+
+        # Find 'direction' of feature (whether it indicates positive or negative class)
+        D = np.zeros(test_X.shape[1])
+        for j in range(test_X.shape[1]):
+            rho = spearmanr(test_X[:, j], shap_pos[:, j]).correlation
+
+            D[j] = 0.0 if (rho is None or np.isnan(rho)) else rho
+            D[j] = 0.0 if np.isnan(rho) else rho  # prevent NaN's (from constant columns)
+
+        # Combine features strength and direction for final scores
+
+        true_review_scores = R * np.clip(D, 0, None)
+        print(f"\nTop 10 features for true reviews:")
+        for j in np.argsort(true_review_scores)[::-1][:10]:
+            feature = self.processor.index_token_list[j]
+            score = true_review_scores[j]
+            print(f"  {feature:<25} score={score:+.4f}  ")
+
+        fake_review_scores = R * np.clip(-D, 0, None)
+        print(f"\nTop 10 features for fake reviews:")
+        for j in np.argsort(fake_review_scores)[::-1][:10]:
+            feature = self.processor.index_token_list[j]
+            score = fake_review_scores[j]
+            print(f"  {feature:<25} score={score:+.4f}  ")
+
+        # -----------------
+        #    OLD VERSION
+        # -----------------
+
+        """feature_mapping = self.processor.index_token_dict
+
         #impurity reductie
         importances = self.model.feature_importances_
         scores = []
@@ -289,37 +394,52 @@ class SingleClassificationTree(Classifier):
         print(importances)
         
         for i  in range(len(importances)):
-            token = index_to_word_mapping[i]
+            token = feature_mapping[i]
             score = importances[i]
             scores.append((token,score))
             #print(token,score)
         
         sorted_pairs_desc = sorted(scores, key=lambda x: x[1], reverse=True)
-        print(sorted_pairs_desc)
+        print(sorted_pairs_desc)"""
 
-class Logisticregression(Classifier):
-    def __init__(self, name: str="LogisticRegression", c:float = 0.1) -> None:
-        super().__init__(name)
+    def plot_tree(self) -> None:
+        plt.figure(figsize=(16, 10))
+        tree.plot_tree(
+            self.model,                                  # your fitted DecisionTreeClassifier
+            feature_names=self.processor.index_token_list,          # list[str] (optional but helpful)
+            class_names=[str(c) for c in self.model.classes_],
+            filled=True, rounded=True, impurity=True, proportion=True, fontsize=10,
+            max_depth=None                           # visualize only top levels if the tree is big
+        )
+        plt.tight_layout()
+        plt.show()
+
+class LRClassifier(Classifier):
+    def __init__(self, 
+                 name: str="LogisticRegression", 
+                 c: float = 0.1,
+                 min_df: float=.00, 
+                 include_bigrams: bool=False) -> None:
+        super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.c = c
         
     def _initialize_model(self):
-        self.model = LogisticRegression(C = self.c 
-        )
+        self.model = LogisticRegression(penalty='l1', C=self.c, solver='liblinear')
 
-    def analyse_feature_importances(self,index_to_word_mapping: Dict[int,str]) -> None:
-        #grote van coëfficient.
+    def analyse_feature_importances(self) -> None:
         coefs = self.model.coef_[0]
-        importance = np.abs(coefs)
-        
-        # in /word
-        scores = [(index_to_word_mapping[i], importance[i]) for i in range(len(importance))]
 
-        #sort 
-        sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
+        print(f"\nTop 10 features for true reviews:")
+        for j in np.argsort(coefs)[::-1][:10]:
+            feature = self.processor.index_token_list[j]
+            print(f"  {feature:<25} coef={coefs[j]:+.4f}  ")
 
-        # 10 most important features.
-        for word, score in sorted_scores[:10]:
-            print(f"{word}: {score:.4f}")
+        print(f"\nTop 10 features for fake reviews:")
+        for j in np.argsort(coefs)[:10]:
+            feature = self.processor.index_token_list[j]
+            print(f"  {feature:<25} score={coefs[j]:+.4f}  ")
+
+
 class RandomForestClassifier(Classifier):
     def __init__(
         self,
@@ -330,9 +450,11 @@ class RandomForestClassifier(Classifier):
         min_samples_leaf: float = 1,
         min_weight_fraction_leaf: float = 0.0,
         max_features: float | str = "sqrt",
-        name: str = "RandomForest"
+        name: str = "RandomForest",
+        min_df: float=.0, 
+        include_bigrams: bool=False
     ) -> None:
-        super().__init__(name)
+        super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.n_estimators = n_estimators
         self.criterion = criterion
         self.max_depth = max_depth
@@ -340,6 +462,8 @@ class RandomForestClassifier(Classifier):
         self.min_samples_leaf = min_samples_leaf
         self.min_weight_fraction_leaf = min_weight_fraction_leaf
         self.max_features = max_features
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
 
     def _initialize_model(self) -> None:
         self.model = SklearnRF(
@@ -350,21 +474,66 @@ class RandomForestClassifier(Classifier):
             min_samples_leaf=self.min_samples_leaf,
             min_weight_fraction_leaf=self.min_weight_fraction_leaf,
             max_features=self.max_features,
+            n_jobs=-1,
             random_state=42
         )
 
-    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
-        importances = self.model.feature_importances_
-        indices = np.argsort(importances)[::-1]
-        max_len = np.max([len(token) for token in index_to_word_mapping.values()])
+    def analyse_feature_importances(self) -> None:
+        train_reviews, train_y = self.loader.load_train_reviews()
 
-        print(f"Top {top_n} Important Features (Random Forest):\n")
+        train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
+        train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+        test_reviews, test_y = self.loader.load_test_reviews()
+        test_X = self.processor.process_test_reviews(test_reviews, include_bigrams=self.include_bigrams)
+
+        explainer = shap.TreeExplainer(self.model, data=train_X)
+        sv = explainer.shap_values(test_X)
+        shap_pos = sv[:,:,1]
+
+        # Compute mean shap values (indicating feature strength)
+        M = np.abs(shap_pos).mean(axis=0)  # per-feature mean |SHAP| for class 1
+        R = M / (M.max() + 1e-12) # normalize to relative strength
+
+        # Find 'direction' of feature (whether it indicates positive or negative class)
+        D = np.zeros(test_X.shape[1])
+        for j in range(test_X.shape[1]):
+            rho = spearmanr(test_X[:, j], shap_pos[:, j]).correlation
+
+            D[j] = 0.0 if (rho is None or np.isnan(rho)) else rho
+            D[j] = 0.0 if np.isnan(rho) else rho  # prevent NaN's (from constant columns)
+
+        # Combine features strength and direction for final scores
+
+        true_review_scores = R * np.clip(D, 0, None)
+        print(f"\nTop 10 features for true reviews:")
+        for j in np.argsort(true_review_scores)[::-1][:10]:
+            feature = self.processor.index_token_list[j]
+            score = true_review_scores[j]
+            print(f"  {feature:<25} score={score:+.4f}  ")
+
+        fake_review_scores = R * np.clip(-D, 0, None)
+        print(f"\nTop 10 features for fake reviews:")
+        for j in np.argsort(fake_review_scores)[::-1][:10]:
+            feature = self.processor.index_token_list[j]
+            score = fake_review_scores[j]
+            print(f"  {feature:<25} score={score:+.4f}  ")
+
+        # -----------------
+        #    OLD VERSION
+        # -----------------
+
+        """importances = self.model.feature_importances_
+        indices = np.argsort(importances)[::-1]
+        max_len = np.max([len(token) for token in self.processor.index_token_list])
+
+        print(f"Top 10 Important Features (Random Forest):\n")
         print('Token'.ljust(max_len + 2)+'|\tImportance')
         print('-'*35)
-        for i in indices[:top_n]:
-            token = index_to_word_mapping.get(i, str(i))
+        for i in indices[:30]:
+            token = self.processor.index_token_list[i]
             print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
-        print("")
+        print("")"""
 
 class GradientBoostingClassifier(Classifier):
     def __init__(
@@ -374,9 +543,11 @@ class GradientBoostingClassifier(Classifier):
         max_depth: int = 3,
         subsample: float = 1.0,
         max_features: str | None = None,
-        name: str = "GradientBoosting"
+        name: str = "GradientBoosting",
+        min_df: float=.005, 
+        include_bigrams: bool=False
     ) -> None:
-        super().__init__(name)
+        super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.max_depth = max_depth

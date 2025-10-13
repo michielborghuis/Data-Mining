@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, List
+from typing import Tuple, List
 
 import numpy as np
 
@@ -32,10 +32,6 @@ class CVManager:
 
         return (train_X, train_y), (val_X, val_y)
     
-def update_index_token_dict(original: Dict[int,str], indices: List) -> List[str]:
-    token_list = ["PLACEHOLDER"] * (max(original.keys())+1)
-    for i in range(len(token_list)):
-        token_list[i] = original[i]
-    
-    token_array = np.array(token_list)
+def update_index_token_list(original: List[str], indices: List) -> List[str]:
+    token_array = np.array(original)
     return list(token_array[indices])
