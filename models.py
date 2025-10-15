@@ -36,11 +36,13 @@ class Classifier:
     def get_performance_metrics(self, X: np.ndarray, y: np.ndarray) -> Dict[str,float]:
         predictions = self.model.predict(X)
 
+        self.correctness_vector = (predictions == y).astype(int)
+
         performance_dict = {}
         performance_dict['accuracy'] = accuracy_score(y, predictions)
-        performance_dict['precision'] = precision_score(y, predictions, zero_division=0.0)
-        performance_dict['recall'] = recall_score(y, predictions, zero_division=0.0)
-        performance_dict['f1'] = f1_score(y, predictions, zero_division=0.0)
+        performance_dict['precision'] = precision_score(y, predictions, zero_division=0.0, pos_label=0)
+        performance_dict['recall'] = recall_score(y, predictions, zero_division=0.0, pos_label=0)
+        performance_dict['f1'] = f1_score(y, predictions, zero_division=0.0, pos_label=0)
 
         return performance_dict
 
