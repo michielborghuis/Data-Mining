@@ -11,7 +11,7 @@ def main() -> None:
     c_min = .1
     c_max = 100_000
 
-    print("BIGRAMS")
+    print("UNIGRAMS")
 
     best_acc = 0
     performance_dict = {}
@@ -33,8 +33,8 @@ def main() -> None:
             model = LRClassifier(
                 min_df=0,
                 c=c,
-                include_bigrams=True,
-                name=f"LR BIGRAM (c={c:.3f})"
+                include_bigrams=False,
+                name=f"LR UNIGRAMS (c={c:.3f})"
             )
 
             if model.name in performance_dict.keys():
@@ -58,8 +58,6 @@ def main() -> None:
 
         # Find the best among the three
         best_idx = int(np.argmax(scores))
-        best_c = candidates[best_idx]
-        best_score = scores[best_idx]
 
         # Narrow search interval depending on where the best C lies
         if best_idx == 0:  # best at lower end

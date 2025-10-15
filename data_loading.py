@@ -11,12 +11,12 @@ class ReviewLoader:
         reviews = []
         labels = []
 
-        for filename in os.listdir(f"{self.base_dir}/truthful_from_Web/fold{fold_nr}"):
+        for filename in sorted(os.listdir(f"{self.base_dir}/truthful_from_Web/fold{fold_nr}")):
             with open(f"{self.base_dir}/truthful_from_Web/fold{fold_nr}/{filename}", 'r') as f:
                 reviews.append(f.read())
                 labels.append(1)
 
-        for filename in os.listdir(f"{self.base_dir}/deceptive_from_MTurk/fold{fold_nr}"):
+        for filename in sorted(os.listdir(f"{self.base_dir}/deceptive_from_MTurk/fold{fold_nr}")):
             with open(f"{self.base_dir}/deceptive_from_MTurk/fold{fold_nr}/{filename}", 'r') as f:
                 reviews.append(f.read())
                 labels.append(0)

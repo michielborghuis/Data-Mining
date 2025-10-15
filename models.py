@@ -26,6 +26,9 @@ class Classifier:
         self.loader = ReviewLoader()
         self.processor = ReviewProcessor()
 
+        self.true_feature_ranks = {}
+        self.false_feature_ranks = {}
+
     def _initialize_model(self):
         # Model not defined for 'vanilla' classifier object
         self.model = None
@@ -36,8 +39,8 @@ class Classifier:
         performance_dict = {}
         performance_dict['accuracy'] = accuracy_score(y, predictions)
         performance_dict['precision'] = precision_score(y, predictions, zero_division=0.0)
-        performance_dict['recall'] = recall_score(y, predictions)
-        performance_dict['f1'] = f1_score(y, predictions)
+        performance_dict['recall'] = recall_score(y, predictions, zero_division=0.0)
+        performance_dict['f1'] = f1_score(y, predictions, zero_division=0.0)
 
         return performance_dict
 
@@ -85,13 +88,27 @@ class Classifier:
         train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
         train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
 
-        test_reviews, test_y = self.loader.load_test_reviews()
-        test_X = self.processor.process_test_reviews(test_reviews, include_bigrams=self.include_bigrams)
-
         self._initialize_model()
         self.model.fit(train_X, train_y)
 
+        test_reviews, test_y = self.loader.load_test_reviews()
+        test_X = self.processor.process_test_reviews(test_reviews, include_bigrams=self.include_bigrams)
+
         return self.get_performance_metrics(test_X, test_y)
+    
+    def get_feature_importance_ranks(self, feature: str) -> Tuple[int,int]:
+        if feature in self.true_feature_ranks:
+            true_rank = self.true_feature_ranks[feature]
+        else:
+            true_rank = len(self.true_feature_ranks) + 1
+
+        if feature in self.false_feature_ranks:
+            false_rank = self.false_feature_ranks[feature]
+        else:
+            false_rank = len(self.false_feature_ranks) + 1
+
+        return (true_rank, false_rank)
+
 
 class NaiveBayesClassifier(Classifier):
     def __init__(self, 
@@ -244,49 +261,81 @@ class NaiveBayesClassifier(Classifier):
 
         return self.get_performance_metrics(test_X, test_y)
 
-    def analyse_feature_importances(self) -> None:
+    def analyse_feature_importances(self, print_top_features: bool=True) -> None:
         feature_mapping = self.processor.index_token_list
         feature_mapping = update_index_token_list(feature_mapping, self.feature_indices)
 
         log_probs = self.model.feature_log_prob_
         log_odds = log_probs[1] - log_probs[0]
 
-        # Top for true reviews
-        true_indices = np.argsort(log_odds)[::-1][:10]
+        if print_top_features:
+            # Top for true reviews
+            true_indices = np.argsort(log_odds)[::-1][:10]
 
-        print(f"\nTop 10 features for true reviews:")
-        for j in true_indices:
-            fn = feature_mapping[j]
-            lo = log_odds[j] 
-            print(f"  {fn:<25} log-odds={lo:+.4f}  ")
+            print(f"\nTop 10 features for true reviews:")
+            for j in true_indices:
+                fn = feature_mapping[j]
+                lo = log_odds[j] 
+                print(f"  {fn:<25} log-odds={lo:+.4f}  ")
 
-        # Top for fake reviews
-        fake_indices = np.argsort(log_odds)[:10]
-        
-        print(f"\nTop 10 features for fake reviews:")
-        for j in fake_indices:
-            fn = feature_mapping[j]
-            lo = log_odds[j] 
-            print(f"  {fn:<25} log-odds={lo:+.4f}  ")
+            # Top for fake reviews
+            fake_indices = np.argsort(log_odds)[:10]
+            
+            print(f"\nTop 10 features for fake reviews:")
+            for j in fake_indices:
+                fn = feature_mapping[j]
+                lo = log_odds[j] 
+                print(f"  {fn:<25} log-odds={lo:+.4f}  ")
+
+        feature_to_logodds = {fn: lo for fn, lo in zip(feature_mapping, log_odds)}
+
+        # Assign ranks with tie handling -> 1, 2, 2, 4 ranking
+
+        # True feature ranking
+        self.true_feature_ranks = {}
+        sorted_features = sorted(feature_to_logodds.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.true_feature_ranks[fn] = current_rank
+
+        # False feature ranking
+        self.false_feature_ranks = {}
+        sorted_features = sorted(feature_to_logodds.items(), key=lambda x: x[1], reverse=False)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.false_feature_ranks[fn] = current_rank
 
 
 class ClassificationTree(Classifier):
     def __init__(self,
-                name: str="ClassificationTree",
-                ccp_alpha: float=.01,
-                min_df: float=.00, 
-                include_bigrams: bool=False,
-                min_samples_leaf: int=1,
-                min_samples_split: int=2,
-                max_depth: int=None) -> None:
+                 name: str="ClassificationTree",
+                 criterion: str="gini",
+                 ccp_alpha: float=.01,
+                 min_df: float=.00, 
+                 include_bigrams: bool=False,
+                 min_samples_leaf: int=1,
+                 min_samples_split: int=2,
+                 max_depth: int=None) -> None:
         super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
+        self.criterion = criterion
         self.ccp_alpha = ccp_alpha
         self.min_samples_leaf = min_samples_leaf
         self.min_samples_split = min_samples_split
         self.max_depth = max_depth
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
 
     def _initialize_model(self):
-        self.model = DecisionTreeClassifier( 
+        self.model = DecisionTreeClassifier(
+            criterion=self.criterion, 
             ccp_alpha=self.ccp_alpha,
             min_samples_leaf=self.min_samples_leaf,
             min_samples_split=self.min_samples_split,
@@ -339,7 +388,7 @@ class ClassificationTree(Classifier):
 
         return best_alphas, best_accs
     
-    def analyse_feature_importances(self) -> None:
+    def analyse_feature_importances(self, print_top_features: bool=True) -> None:
         train_reviews, train_y = self.loader.load_train_reviews()
 
         train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
@@ -368,18 +417,46 @@ class ClassificationTree(Classifier):
         # Combine features strength and direction for final scores
 
         true_review_scores = R * np.clip(D, 0, None)
-        print(f"\nTop 10 features for true reviews:")
-        for j in np.argsort(true_review_scores)[::-1][:10]:
-            feature = self.processor.index_token_list[j]
-            score = true_review_scores[j]
-            print(f"  {feature:<25} score={score:+.4f}  ")
+        if print_top_features:
+            print(f"\nTop 10 features for true reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = true_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
 
         fake_review_scores = R * np.clip(-D, 0, None)
-        print(f"\nTop 10 features for fake reviews:")
-        for j in np.argsort(fake_review_scores)[::-1][:10]:
-            feature = self.processor.index_token_list[j]
-            score = fake_review_scores[j]
-            print(f"  {feature:<25} score={score:+.4f}  ")
+        if print_top_features:
+            print(f"\nTop 10 features for fake reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = fake_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
+
+        # Assign ranks with tie handling -> 1, 2, 2, 4 ranking
+        
+        # True feature ranking
+        self.true_feature_ranks = {}
+        feature_to_true_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, true_review_scores)}
+        sorted_features = sorted(feature_to_true_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.true_feature_ranks[fn] = current_rank
+
+        # False feature ranking
+        self.false_feature_ranks = {}
+        feature_to_false_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, fake_review_scores)}
+        sorted_features = sorted(feature_to_false_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.false_feature_ranks[fn] = current_rank
 
         # -----------------
         #    OLD VERSION
@@ -419,22 +496,56 @@ class LRClassifier(Classifier):
                  include_bigrams: bool=False) -> None:
         super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.c = c
+        self.min_df = min_df
+        self.include_bigrams = include_bigrams
         
     def _initialize_model(self):
-        self.model = LogisticRegression(penalty='l1', C=self.c, solver='liblinear')
+        self.model = LogisticRegression(
+            penalty='l1', 
+            C=self.c, 
+            solver='liblinear',
+            random_state=42
+        )
 
-    def analyse_feature_importances(self) -> None:
+    def analyse_feature_importances(self, print_top_features: bool=True) -> None:
         coefs = self.model.coef_[0]
 
-        print(f"\nTop 10 features for true reviews:")
-        for j in np.argsort(coefs)[::-1][:10]:
-            feature = self.processor.index_token_list[j]
-            print(f"  {feature:<25} coef={coefs[j]:+.4f}  ")
+        if print_top_features:
+            print(f"\nTop 10 features for true reviews:")
+            for j in np.argsort(coefs)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                print(f"  {feature:<25} coef={coefs[j]:+.4f}  ")
 
-        print(f"\nTop 10 features for fake reviews:")
-        for j in np.argsort(coefs)[:10]:
-            feature = self.processor.index_token_list[j]
-            print(f"  {feature:<25} score={coefs[j]:+.4f}  ")
+            print(f"\nTop 10 features for fake reviews:")
+            for j in np.argsort(coefs)[:10]:
+                feature = self.processor.index_token_list[j]
+                print(f"  {feature:<25} score={coefs[j]:+.4f}  ")
+
+        # Assign ranks with tie handling -> 1, 2, 2, 4 ranking
+        
+        # True feature ranking
+        self.true_feature_ranks = {}
+        feature_to_true_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, coefs)}
+        sorted_features = sorted(feature_to_true_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.true_feature_ranks[fn] = current_rank
+
+        # False feature ranking
+        self.false_feature_ranks = {}
+        feature_to_false_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, coefs)}
+        sorted_features = sorted(feature_to_false_score.items(), key=lambda x: x[1], reverse=False)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.false_feature_ranks[fn] = current_rank
 
 
 class RandomForestClassifier(Classifier):
@@ -473,7 +584,7 @@ class RandomForestClassifier(Classifier):
             random_state=42
         )
 
-    def analyse_feature_importances(self) -> None:
+    def analyse_feature_importances(self, print_top_features: bool=True) -> None:
         train_reviews, train_y = self.loader.load_train_reviews()
 
         train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
@@ -501,18 +612,44 @@ class RandomForestClassifier(Classifier):
         # Combine features strength and direction for final scores
 
         true_review_scores = R * np.clip(D, 0, None)
-        print(f"\nTop 10 features for true reviews:")
-        for j in np.argsort(true_review_scores)[::-1][:10]:
-            feature = self.processor.index_token_list[j]
-            score = true_review_scores[j]
-            print(f"  {feature:<25} score={score:+.4f}  ")
+        if print_top_features:
+            print(f"\nTop 10 features for true reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = true_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
 
         fake_review_scores = R * np.clip(-D, 0, None)
-        print(f"\nTop 10 features for fake reviews:")
-        for j in np.argsort(fake_review_scores)[::-1][:10]:
-            feature = self.processor.index_token_list[j]
-            score = fake_review_scores[j]
-            print(f"  {feature:<25} score={score:+.4f}  ")
+        if print_top_features:
+            print(f"\nTop 10 features for fake reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = fake_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
+
+        # True feature ranking
+        self.true_feature_ranks = {}
+        feature_to_true_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, true_review_scores)}
+        sorted_features = sorted(feature_to_true_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.true_feature_ranks[fn] = current_rank
+
+        # False feature ranking
+        self.false_feature_ranks = {}
+        feature_to_false_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, fake_review_scores)}
+        sorted_features = sorted(feature_to_false_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.false_feature_ranks[fn] = current_rank
 
         # -----------------
         #    OLD VERSION
@@ -545,7 +682,7 @@ class GradientBoostingClassifier(Classifier):
         super().__init__(name=name, min_df=min_df, include_bigrams=include_bigrams)
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
-        self.max_depth = max_depth
+        self.max_depth = max_depth  
         self.subsample = subsample
         self.max_features = max_features
         self.min_df = min_df
@@ -562,18 +699,87 @@ class GradientBoostingClassifier(Classifier):
             random_state=42
         )
 
-    def analyse_feature_importances(self, index_to_word_mapping: Dict[int,str], top_n: int = 20) -> None:
-        importances = self.model.feature_importances_
-        indices = np.argsort(importances)[::-1]
-        max_len = max(len(str(token)) for token in index_to_word_mapping.values())
+    def analyse_feature_importances(self, print_top_features: bool=True) -> None:
+        train_reviews, train_y = self.loader.load_train_reviews()
 
-        print(f"Top {top_n} Important Features (Gradient Boosting):\n")
-        print('Token'.ljust(max_len + 2)+'|\tImportance')
-        print('-'*35)
-        for i in indices[:top_n]:
-            token = index_to_word_mapping.get(i, str(i))
-            print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
-        print("")
+        train_X = self.processor.process_train_reviews(train_reviews, include_bigrams=self.include_bigrams)
+        train_X = self.processor.filter_rare_terms(train_X, min_review_freq=self.min_df)
+
+        test_reviews, test_y = self.loader.load_test_reviews()
+        test_X = self.processor.process_test_reviews(test_reviews, include_bigrams=self.include_bigrams)
+
+        explainer = shap.TreeExplainer(self.model, data=train_X)
+        shap_pos = explainer.shap_values(test_X)
+
+        # Compute mean shap values (indicating feature strength)
+        M = np.abs(shap_pos).mean(axis=0)  # per-feature mean |SHAP| for class 1
+        R = M / (M.max() + 1e-12) # normalize to relative strength
+
+        # Find 'direction' of feature (whether it indicates positive or negative class)
+        D = np.zeros(test_X.shape[1])
+        for j in range(test_X.shape[1]):
+            rho = spearmanr(test_X[:, j], shap_pos[:, j]).correlation
+
+            D[j] = 0.0 if (rho is None or np.isnan(rho)) else rho
+            D[j] = 0.0 if np.isnan(rho) else rho  # prevent NaN's (from constant columns)
+
+        # Combine features strength and direction for final scores
+
+        true_review_scores = R * np.clip(D, 0, None)
+        if print_top_features:
+            print(f"\nTop 10 features for true reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = true_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
+
+        fake_review_scores = R * np.clip(-D, 0, None)
+        if print_top_features:
+            print(f"\nTop 10 features for fake reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:10]:
+                feature = self.processor.index_token_list[j]
+                score = fake_review_scores[j]
+                print(f"  {feature:<25} score={score:+.4f}  ")
+
+        # True feature ranking
+        self.true_feature_ranks = {}
+        feature_to_true_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, true_review_scores)}
+        sorted_features = sorted(feature_to_true_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.true_feature_ranks[fn] = current_rank
+
+        # False feature ranking
+        self.false_feature_ranks = {}
+        feature_to_false_score = {fn: lo for fn, lo in zip(self.processor.index_token_list, fake_review_scores)}
+        sorted_features = sorted(feature_to_false_score.items(), key=lambda x: x[1], reverse=True)
+        current_rank = 1
+        prev_value = None
+        for i, (fn, lo) in enumerate(sorted_features, start=1):
+            if lo != prev_value:
+                current_rank = i  # update rank only when value changes
+                prev_value = lo
+            self.false_feature_ranks[fn] = current_rank
+
+        # -----------------
+        #    OLD VERSION
+        # -----------------
+
+        """importances = self.model.feature_importances_
+        # indices = np.argsort(importances)[::-1]
+        # max_len = max(len(str(token)) for token in index_to_word_mapping.values())
+
+        # print(f"Top {top_n} Important Features (Gradient Boosting):\n")
+        # print('Token'.ljust(max_len + 2)+'|\tImportance')
+        # print('-'*35)
+        # for i in indices[:top_n]:
+        #     token = index_to_word_mapping.get(i, str(i))
+        #     print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
+        # print("")"""
 
     def get_validation_performance(self, n_folds: int=10, n_repeats: int=1) -> Dict[str,float]:
         # Load reviews from files
