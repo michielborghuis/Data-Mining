@@ -1,8 +1,15 @@
-from models import NaiveBayesClassifier,LRClassifier,ClassificationTree,RandomForestClassifier,GradientBoostingClassifier
-
-
 import numpy as np
 import random
+
+from models import (
+    NaiveBayesClassifier,
+    LRClassifier,
+    ClassificationTree,
+    RandomForestClassifier,
+    GradientBoostingClassifier
+)
+
+from util import perform_q_test
 
 # Set seeds for reproducibility
 np.random.seed(42)
@@ -148,8 +155,10 @@ def main() -> None:
             f"{test_set_performance['recall']:.3f}\t|\t" + \
             f"{test_set_performance['f1']:.3f}"
         )
+    
+    perform_q_test(models)
 
-        """model.analyse_feature_importances(print_top_features=False)
+    """model.analyse_feature_importances(print_top_features=False)
         all_feature_tokens = all_feature_tokens.union(set(model.processor.token_index_dict.keys()))
 
     model.analyse_feature_importances(print_top_features=True)
