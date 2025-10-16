@@ -40,9 +40,8 @@ def update_index_token_list(original: List[str], indices: List) -> List[str]:
     token_array = np.array(original)
     return list(token_array[indices])
 
-def perform_q_test(models: List) -> None:
+def perform_mcnemar_tests(models: List) -> None:
     names = [model.name for model in models]
-    # shape: (n_samples, n_models)
     prediction_results = np.vstack([
         model.correctness_vector for model in models
     ]).T

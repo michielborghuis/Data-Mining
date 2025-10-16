@@ -6,7 +6,7 @@ import numpy as np
 import nltk
 from nltk.corpus import stopwords
 
-#nltk.download('stopwords')
+#nltk.download('stopwords') # Include this line if you haven't yet downloaded nltk's stopwords
 
 class ReviewProcessor:
     def __init__(self) -> None:
@@ -21,7 +21,7 @@ class ReviewProcessor:
     
     def _remove_punctuation(self, review: str) -> str:
         return review.translate(self.translator)
-    
+
     def _get_unigrams(self, review: str) -> List[str]:
         return review.split()
     
@@ -125,5 +125,6 @@ class ReviewProcessor:
 
         self.token_index_dict = new_token_index_dict
         self.index_token_list = new_index_token_list
+
 
         return new_matrix

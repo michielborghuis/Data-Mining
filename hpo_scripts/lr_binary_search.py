@@ -1,4 +1,7 @@
-from models import LRClassifier
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+from models.models import LRClassifier
 
 import numpy as np
 import random

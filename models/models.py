@@ -13,9 +13,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from sklearn import tree
 from scipy.stats import spearmanr
 
-from data_loading import ReviewLoader
-from preprocessing import ReviewProcessor
-from util import CVManager, update_index_token_list
+from utils.data_loading import ReviewLoader
+from utils.preprocessing import ReviewProcessor
+from utils.util import CVManager, update_index_token_list
 
 class Classifier:
     def __init__(self, min_df: float=.005, include_bigrams: bool=False, name: str="ReviewClassifier") -> None:
@@ -271,23 +271,28 @@ class NaiveBayesClassifier(Classifier):
         log_odds = log_probs[1] - log_probs[0]
 
         if print_top_features:
-            # Top for true reviews
-            true_indices = np.argsort(log_odds)[::-1][:10]
+            print("-"*50)
+            print(f"\t{self.name} FEATURE ANALYSIS")
+            print("-"*50)
 
-            print(f"\nTop 10 features for true reviews:")
+            # Top for true reviews
+            true_indices = np.argsort(log_odds)[::-1][:5]
+
+            print(f"\nTop features for truthful reviews:")
             for j in true_indices:
                 fn = feature_mapping[j]
                 lo = log_odds[j] 
                 print(f"  {fn:<25} log-odds={lo:+.4f}  ")
 
             # Top for fake reviews
-            fake_indices = np.argsort(log_odds)[:10]
+            fake_indices = np.argsort(log_odds)[:5]
             
-            print(f"\nTop 10 features for fake reviews:")
+            print(f"\nTop features for deceptive reviews:")
             for j in fake_indices:
                 fn = feature_mapping[j]
                 lo = log_odds[j] 
                 print(f"  {fn:<25} log-odds={lo:+.4f}  ")
+            print("")
 
         feature_to_logodds = {fn: lo for fn, lo in zip(feature_mapping, log_odds)}
 
@@ -420,19 +425,24 @@ class ClassificationTree(Classifier):
 
         true_review_scores = R * np.clip(D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for true reviews:")
-            for j in np.argsort(true_review_scores)[::-1][:10]:
+            print("-"*50)
+            print(f"\t{self.name} FEATURE ANALYSIS")
+            print("-"*50)
+
+            print(f"\nTop features for truthful reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = true_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
 
         fake_review_scores = R * np.clip(-D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for fake reviews:")
-            for j in np.argsort(fake_review_scores)[::-1][:10]:
+            print(f"\nTop features for deceptive reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = fake_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
+            print("")
 
         # Assign ranks with tie handling -> 1, 2, 2, 4 ranking
         
@@ -459,24 +469,6 @@ class ClassificationTree(Classifier):
                 current_rank = i  # update rank only when value changes
                 prev_value = lo
             self.false_feature_ranks[fn] = current_rank
-
-        # -----------------
-        #    OLD VERSION
-        # -----------------
-
-        """feature_mapping = self.processor.index_token_dict
-
-        #impurity reductie
-        importances = self.model.feature_importances_
-        scores = []
-        
-        for i  in range(len(importances)):
-            token = feature_mapping[i]
-            score = importances[i]
-            scores.append((token,score))
-        
-        sorted_pairs_desc = sorted(scores, key=lambda x: x[1], reverse=True)
-        print(sorted_pairs_desc)"""
 
     def plot_tree(self) -> None:
         plt.figure(figsize=(16, 10))
@@ -513,15 +505,20 @@ class LRClassifier(Classifier):
         coefs = self.model.coef_[0]
 
         if print_top_features:
-            print(f"\nTop 10 features for true reviews:")
-            for j in np.argsort(coefs)[::-1][:10]:
+            print("-"*50)
+            print(f"\t{self.name} FEATURE ANALYSIS")
+            print("-"*50)
+
+            print(f"\nTop features for truthful reviews:")
+            for j in np.argsort(coefs)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 print(f"  {feature:<25} coef={coefs[j]:+.4f}  ")
 
-            print(f"\nTop 10 features for fake reviews:")
-            for j in np.argsort(coefs)[:10]:
+            print(f"\nTop features for deceptive reviews:")
+            for j in np.argsort(coefs)[:5]:
                 feature = self.processor.index_token_list[j]
                 print(f"  {feature:<25} score={coefs[j]:+.4f}  ")
+            print("")
 
         # Assign ranks with tie handling -> 1, 2, 2, 4 ranking
         
@@ -615,19 +612,24 @@ class RandomForestClassifier(Classifier):
 
         true_review_scores = R * np.clip(D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for true reviews:")
-            for j in np.argsort(true_review_scores)[::-1][:10]:
+            print("-"*50)
+            print(f"\t{self.name} FEATURE ANALYSIS")
+            print("-"*50)
+
+            print(f"\nTop features for truthful reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = true_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
 
         fake_review_scores = R * np.clip(-D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for fake reviews:")
-            for j in np.argsort(fake_review_scores)[::-1][:10]:
+            print(f"\nTop features for deceptive reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = fake_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
+            print("")
 
         # True feature ranking
         self.true_feature_ranks = {}
@@ -653,21 +655,6 @@ class RandomForestClassifier(Classifier):
                 prev_value = lo
             self.false_feature_ranks[fn] = current_rank
 
-        # -----------------
-        #    OLD VERSION
-        # -----------------
-
-        """importances = self.model.feature_importances_
-        indices = np.argsort(importances)[::-1]
-        max_len = np.max([len(token) for token in self.processor.index_token_list])
-
-        print(f"Top 10 Important Features (Random Forest):\n")
-        print('Token'.ljust(max_len + 2)+'|\tImportance')
-        print('-'*35)
-        for i in indices[:30]:
-            token = self.processor.index_token_list[i]
-            print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
-        print("")"""
 
 class GradientBoostingClassifier(Classifier):
     def __init__(
@@ -729,19 +716,24 @@ class GradientBoostingClassifier(Classifier):
 
         true_review_scores = R * np.clip(D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for true reviews:")
-            for j in np.argsort(true_review_scores)[::-1][:10]:
+            print("-"*50)
+            print(f"\t{self.name} FEATURE ANALYSIS")
+            print("-"*50)
+
+            print(f"\nTop features for truthful reviews:")
+            for j in np.argsort(true_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = true_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
 
         fake_review_scores = R * np.clip(-D, 0, None)
         if print_top_features:
-            print(f"\nTop 10 features for fake reviews:")
-            for j in np.argsort(fake_review_scores)[::-1][:10]:
+            print(f"\nTop features for deceptive reviews:")
+            for j in np.argsort(fake_review_scores)[::-1][:5]:
                 feature = self.processor.index_token_list[j]
                 score = fake_review_scores[j]
                 print(f"  {feature:<25} score={score:+.4f}  ")
+            print("")
 
         # True feature ranking
         self.true_feature_ranks = {}
@@ -766,22 +758,6 @@ class GradientBoostingClassifier(Classifier):
                 current_rank = i  # update rank only when value changes
                 prev_value = lo
             self.false_feature_ranks[fn] = current_rank
-
-        # -----------------
-        #    OLD VERSION
-        # -----------------
-
-        """importances = self.model.feature_importances_
-        # indices = np.argsort(importances)[::-1]
-        # max_len = max(len(str(token)) for token in index_to_word_mapping.values())
-
-        # print(f"Top {top_n} Important Features (Gradient Boosting):\n")
-        # print('Token'.ljust(max_len + 2)+'|\tImportance')
-        # print('-'*35)
-        # for i in indices[:top_n]:
-        #     token = index_to_word_mapping.get(i, str(i))
-        #     print(f"{token}".ljust(max_len + 2)+f"|\t{importances[i]:.5f}")
-        # print("")"""
 
     def get_validation_performance(self, n_folds: int=10, n_repeats: int=1) -> Dict[str,float]:
         # Load reviews from files
@@ -808,12 +784,6 @@ class GradientBoostingClassifier(Classifier):
 
                 # Load test reviews
                 val_X = self.processor.process_test_reviews(val_X, include_bigrams=self.include_bigrams)
-
-                # TODO: Maybe for later feature selection
-                # self.select_features(train_X, train_y)
-
-                # train_X = train_X[:,self.feature_indices]
-                # val_X = val_X[:,self.feature_indices]
 
                 self._initialize_model()
                 self.model.fit(train_X, train_y)

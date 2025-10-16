@@ -1,4 +1,7 @@
-from models import NaiveBayesClassifier
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+from models.models import NaiveBayesClassifier
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,8 +12,7 @@ np.random.seed(42)
 random.seed(42)
 
 def main() -> None:
-    #print("UNIGRAM (continued, best=565)")
-    print("BIGRAM")
+    print("UNIGRAM")
     print("")
     print("CROSS-VALIDATION PERFORMANCES:")
     print("")
@@ -19,27 +21,29 @@ def main() -> None:
     print("-"*30+" "*8+"-"*30)
 
     drop_features = 0
-    step_size = 50
+    step_size = 1
     all_accs = []
     best_acc = 0
     standard_error = 0
     while True:
         try:
-            #model = NaiveBayesClassifier(
-            #    smoothing_alpha=1.0,
-            #    min_df=.005,
-            #    drop_features=drop_features,
-            #    include_bigrams=False,
-            #    name=f"DROP {drop_features} FEATS"
-            #)
-
             model = NaiveBayesClassifier(
-                smoothing_alpha=0.5,
-                min_df=.01,
-                drop_features=drop_features,
-                include_bigrams=True,
+                smoothing_alpha=1.0,
+                min_df=.005,
+                feature_mode='drop',
+                features=drop_features,
+                include_bigrams=False,
                 name=f"DROP {drop_features} FEATS"
             )
+
+            #model = NaiveBayesClassifier(
+            #    smoothing_alpha=0.5,
+            #    min_df=.01,
+            #    feature_mode='drop',
+            #    features=drop_features,
+            #    include_bigrams=True,
+            #    name=f"DROP {drop_features} FEATS"
+            #)
             
             val_accs = model.get_validation_performance(n_folds=10, n_repeats=1)['accuracy']
             cur_acc = np.mean(val_accs)

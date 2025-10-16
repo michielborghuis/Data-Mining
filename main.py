@@ -1,7 +1,7 @@
 import numpy as np
 import random
 
-from models import (
+from models.models import (
     NaiveBayesClassifier,
     LRClassifier,
     ClassificationTree,
@@ -9,14 +9,17 @@ from models import (
     GradientBoostingClassifier
 )
 
-from util import perform_q_test
+from utils.util import perform_mcnemar_tests
 
 # Set seeds for reproducibility
 np.random.seed(42)
 random.seed(42)
 
 def main() -> None:
-    # Specify which model configurations to evaluate
+    # -------------------------------------------
+    #       1. SPECIFY MODEL CONFIGURATIONS
+    # -------------------------------------------
+
     models = [
         # ---------------------------------------
         #       FINAL UNIGRAM CLASSIFIERS
@@ -51,7 +54,6 @@ def main() -> None:
             max_depth=20,
             min_samples_split=2,
             min_samples_leaf=1,
-            max_features='log2',
             name="FINAL RF UNIGRAM"
         ),
         GradientBoostingClassifier(
@@ -114,31 +116,10 @@ def main() -> None:
         )
     ]
 
-    """print("")
-    print("CROSS-VALIDATION PERFORMANCES:")
-    print("")
-    print("-"*85)
-    print(f"{'MODEL':<30}|\tACC\t|\tPREC\t|\tREC\t|\tF1")
-    print("-"*85)
-    for model in models:
-        val_performance = model.get_validation_performance(n_folds=10, n_repeats=3)
+    # -------------------------------------------
+    #       2. GET MODEL PERFORMANCES
+    # -------------------------------------------
 
-        print(
-            f"{model.name:<30}|\t" + \
-            f"{100*np.mean(val_performance['accuracy']):.2f}%\t|\t" + \
-            f"{np.mean(val_performance['precision']):.2f}\t|\t" + \
-            f"{np.mean(val_performance['recall']):.2f}\t|\t" + \
-            f"{np.mean(val_performance['f1']):.2f}"
-        )
-
-    print("")"""
-
-    #exit()
-
-    # NOTE: we should only start looking at test set performance in a couple of weeks or so
-    #   -> modelling/hyperparameter choices should NOT be based on test set performance 
-
-    all_feature_tokens = set()
     print("")
     print("TEST SET PERFORMANCES:")
     print("")
@@ -155,13 +136,34 @@ def main() -> None:
             f"{test_set_performance['recall']:.3f}\t|\t" + \
             f"{test_set_performance['f1']:.3f}"
         )
-    
-    perform_q_test(models)
+    print("-"*85)
+    print('\n'+'#'*85+'\n')
 
-    """model.analyse_feature_importances(print_top_features=False)
-        all_feature_tokens = all_feature_tokens.union(set(model.processor.token_index_dict.keys()))
+    # -------------------------------------------
+    #       3. PERFORM STATISTICAL TEST
+    # -------------------------------------------
 
-    model.analyse_feature_importances(print_top_features=True)
+    print("")
+    print("MCNEMAR TEST P-VALUES:")
+    print("")
+    perform_mcnemar_tests(models)
+    print('\n'+'#'*85+'\n')
+
+    # -------------------------------------------
+    #       4. PERFORM FEATURE ANALYSIS
+    # -------------------------------------------
+
+    print("")
+    print("FEATURE ANALYSES:")
+    print("")
+
+    all_feature_tokens = set()
+    for model in models:
+        if model.include_bigrams == True:
+            model.analyse_feature_importances(print_top_features=True)
+            all_feature_tokens = all_feature_tokens.union(set(model.processor.token_index_dict.keys()))
+
+    print('\n'+'#'*85+'\n')
 
     all_feature_tokens = list(all_feature_tokens)
     true_feature_ranks = np.zeros((len(models), len(all_feature_tokens)))
@@ -175,20 +177,20 @@ def main() -> None:
     print("")
     average_true_ranks = np.mean(true_feature_ranks, axis=0)
     indices = np.argsort(average_true_ranks)
-    print('-'*100)
+    print('-'*75)
     print("FEATURES OVERALL MOST INDICATIVE OF TRUTHFUL REVIEWS")
-    print('-'*100)
+    print('-'*75)
     for rank in range(10):
         print(f"{rank+1}. {all_feature_tokens[indices[rank]]:<29}"+(" "*(rank!=9))+f"({average_true_ranks[indices[rank]]:.1f} AVG RANK)")
     
     print("")
     average_fake_ranks = np.mean(fake_feature_ranks, axis=0)
     indices = np.argsort(average_fake_ranks)
-    print('-'*100)
+    print('-'*75)
     print("FEATURES OVERALL MOST INDICATIVE OF DECEPTIVE REVIEWS")
-    print('-'*100)
+    print('-'*75)
     for rank in range(10):
-        print(f"{rank+1}. {all_feature_tokens[indices[rank]]:<29}"+(" "*(rank!=9))+f"({average_fake_ranks[indices[rank]]:.1f} AVG RANK)")"""
+        print(f"{rank+1}. {all_feature_tokens[indices[rank]]:<29}"+(" "*(rank!=9))+f"({average_fake_ranks[indices[rank]]:.1f} AVG RANK)")
 
 if __name__ == "__main__":
     main()

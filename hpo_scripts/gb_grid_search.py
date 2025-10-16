@@ -1,4 +1,7 @@
-from models import GradientBoostingClassifier
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+from models.models import GradientBoostingClassifier
 
 import numpy as np
 import random
@@ -60,13 +63,6 @@ def main() -> None:
     print("-"*150)
     print(f"{'MODEL':<50}|\tACC\t|\tPREC\t|\tREC\t|\tF1\t|\t\tBEST MODEL")
     print("-"*150)
-    write_result("")
-    write_result("CROSS-VALIDATION PERFORMANCES:")
-    write_result("")
-    write_result("-"*150)
-    write_result(f"{'MODEL':<50}|\tACC\t|\tPREC\t|\tREC\t|\tF1\tBEST MODEL")
-    write_result("-"*150)
-
     for include_bigrams in grid['include_bigrams']:
         for df in grid['doc_freqs']:
             for n_est in grid['n_estimators']:
@@ -101,17 +97,8 @@ def main() -> None:
                                     f"{np.mean(cv_performance['f1']):.2f}\t|\t" + \
                                     f"{best_model:<50}"
                                 )
-                                write_result(
-                                    f"{model.name:<50}|\t" + \
-                                    f"{100*np.mean(cv_performance['accuracy']):.2f}%\t|\t" + \
-                                    f"{np.mean(cv_performance['precision']):.2f}\t|\t" + \
-                                    f"{np.mean(cv_performance['recall']):.2f}\t|\t" + \
-                                    f"{np.mean(cv_performance['f1']):.2f}\t|\t" + \
-                                    f"{best_model:<50}"
-                                )
 
     print("")
-    write_result("")
 
 if __name__ == "__main__":
     main()

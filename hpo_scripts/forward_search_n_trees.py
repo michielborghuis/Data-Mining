@@ -1,6 +1,8 @@
-from models import GradientBoostingClassifier
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 
-import matplotlib.pyplot as plt
+from models.models import GradientBoostingClassifier, RandomForestClassifier
+
 import numpy as np
 import random
 
